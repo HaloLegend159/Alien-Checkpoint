@@ -101,6 +101,11 @@
   .log{height:90px;overflow:hidden}
   .rule{padding:6px}
   .progress{height:6px}
+  /* Phone-friendly sticky action bar */
+  @media (max-width: 720px){
+    .tools.big{position:sticky;bottom:0;left:0;right:0;background:#0f1626CC;border-top:1px solid var(--border);backdrop-filter:blur(6px);padding:8px;z-index:5}
+    .tools.big .btn{flex:1;min-height:44px}
+  }
 </style>
 </head>
 <body>
@@ -114,6 +119,7 @@
       <div class="stat"><b>Rank:</b> <span id="ui-rank" class="rank">Recruit</span></div>
       <div class="grow"></div>
       <button class="btn" id="btn-manual" title="Training manual">Training Manual</button>
+      <button class="btn" id="btn-shop" title="Buy upgrades with credits">Upgrades</button>
       <button class="btn" id="btn-newday" title="Start/End Day (Space)">Start Day</button>
       <button class="btn" id="btn-reset" title="Reset save">Reset</button>
     </header>
@@ -156,7 +162,6 @@
               <tr><td>Quarantine</td><td id="vs-quar">—</td></tr>
               <tr><td>Seal Code</td><td id="vs-seal">—</td></tr>
             </table>
-            <div class="muted" style="margin-top:6px">Valid seal format: <code>NX-123</code> (exact). Common forgeries: <code>NX123</code>, <code>NQ-123</code>, <code>NX-1234</code>, <code>NX-12a</code>.</div>
             <div class="stamp ok" id="vs-stamp">APPROVED</div>
           </div>
           <div class="doc" id="photoid">
@@ -165,7 +170,7 @@
               <img id="pid-photo" alt="Recorded photo" />
               <div>
                 <div id="pid-name" style="font-weight:700">—</div>
-                <div id="pid-caption" class="muted">—</div>
+                <div id="pid-caption" class="muted">Dockyard archive photo on arrival</div>
                 <div class="faceRow" id="pid-feats">—</div>
               </div>
             </div>
@@ -232,8 +237,23 @@
           </ul>
           <h4>Seal Examples</h4>
           <p><b>Valid:</b> <code>NX-123</code>. <b>Invalid:</b> <code>NX123</code>, <code>NQ-123</code>, <code>NX-1234</code>, <code>NX-12a</code>.</p>
+          <h4>Planet of Origin vs Planet Permit</h4>
+          <p>The planet on the <b>Passport</b> must match the <b>Planet Permit</b> on the <b>Visa</b>. If they differ, that is a document failure (DENY unless detention rules apply).</p>
           <p>Use <b>Scan Genetic Key</b> on the passport. The <b>Wanted Database</b> box (below the docs) auto-fills; click <b>Check</b> to verify.</p>
           <p>Quarantine levels: <b>None</b> (ok), <b>Level‑1</b> (ok if other docs are valid), <b>Level‑2</b> or <b>Biohazard</b> (DETAIN).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upgrades Shop Modal -->
+    <div class="modal" id="shop" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:999">
+      <div class="modalCard" style="width:min(760px,92vw);max-height:80vh;background:#0f1626;border:1px solid #1f2a44;border-radius:12px;box-shadow:0 18px 60px #000a;display:flex;flex-direction:column">
+        <div class="modalHead" style="display:flex;align-items:center;justify-content:space-between;padding:10px;border-bottom:1px solid #1f2a44">
+          <strong>Dock Upgrades</strong>
+          <button class="closeX" id="shop-close" style="cursor:pointer;border:1px solid #1f2a44;border-radius:8px;background:#121a2b;padding:4px 8px;color:#e6f0ff">✕</button>
+        </div>
+        <div class="modalBody" style="padding:12px;overflow:auto;color:#cfe1ff">
+          <div id="shop-list" style="display:grid;grid-template-columns:1fr;gap:10px"></div>
         </div>
       </div>
     </div>
@@ -261,7 +281,9 @@
     inDay:false,
     queue:[],
     current:null,
-    seed: Math.floor(Math.random()*1e9)
+    seed: Math.floor(Math.random()*1e9),
+    upgrades:{ pay:0, shield:false, queuePlus:0 },
+    shieldUsed:false
   };
 
   // Wanted registry seeded each session
@@ -274,8 +296,8 @@
   const byId = id=>document.getElementById(id);
   const log = (msg)=>{ const el=byId('log'); const p=document.createElement('p'); p.textContent=msg; el.prepend(p); };
   const toast=(m)=>{const t=byId('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',1500)}
-  function save(){ localStorage.setItem(SAVE_KEY, JSON.stringify({ day:state.day, credits:state.credits, xp:state.xp })); }
-  function load(){ try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); if(s){ state.day=s.day; state.credits=s.credits; state.xp=s.xp||0; } }catch(e){} }
+  function save(){ localStorage.setItem(SAVE_KEY, JSON.stringify({ day:state.day, credits:state.credits, xp:state.xp, upgrades:state.upgrades })); }
+  function loadSave(){ try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); if(s){ state.day=s.day||1; state.credits=s.credits||0; state.xp=s.xp||0; state.upgrades = s.upgrades || {pay:0,shield:false,queuePlus:0}; } }catch(e){} }
   function todayISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
   function fmtMDY(s){ if(!s) return '—'; const [y,m,d]=s.split('-'); return `${m}-${d}-${y}` }
   function todayMDY(){ const d=new Date(); return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()}`; }
@@ -353,6 +375,8 @@
     const expOk = rand()>0.18;
     const exp = expOk? new Date(Date.now() + (2+Math.floor(rand()*30))*86400000).toISOString().slice(0,10)
                       : new Date(Date.now() - (1+Math.floor(rand()*10))*86400000).toISOString().slice(0,10);
+    // Sometimes the Visa lists a different planet permit (for mismatch checks)
+    let vsPlanet = planet; if(rand()>0.85){ const pool = SPECIES.map(s=>s.planets).reduce((a,b)=>a.concat(b),[]).filter(p=>p!==planet); if(pool.length) vsPlanet = pick(pool); }
     const purpose = pick(PURPOSES);
     const duration = pick(DURATIONS);
     const seal = (rand()>0.2)? ('NX-'+(100+Math.floor(rand()*900))) : makeBadSeal();
@@ -363,18 +387,25 @@
     const photoForged = rand()>0.82;
     const photoFeats = photoForged? maybePhotoMismatch(feats) : JSON.parse(JSON.stringify(feats));
     // Hints & quarantine
-    const hints=[]; if(!/^NX-\d{3}$/.test(seal)) hints.push('Visa seal formatting looks off'); if(!expOk) hints.push('Passport expired'); if(photoForged) hints.push('Photo ID features differ'); if(vsSmudged) hints.push('Visa name appears smudged');
+    const hints=[]; 
     const qLevels=['None','Level-1','Level-2','Biohazard'];
     const quarantine = rand()>0.9 ? pick(qLevels.slice(1)) : 'None';
-    return { sp:sp.name, planet, name, vsName, vsSmudged, pidName:name, dob, exp, purpose, duration, quarantine, seal, gk, feats, photoFeats, hints, _gkScanned:false, _gkFlagged:false };
+    return { sp:sp.name, planet, vsPlanet, name, vsName, vsSmudged, pidName:name, dob, exp, purpose, duration, quarantine, seal, gk, feats, photoFeats, hints, _gkScanned:false, _gkFlagged:false };
   }
 
-  function buildQueue(){ state.queue = Array.from({length:5 + Math.floor(state.day/2)}, ()=>makeAlien()); state.todayRules = baseRules(); }
+  function buildQueue(){
+    const base = 5 + Math.floor(state.day/2);
+    const extra = (state.upgrades.queuePlus||0)*2;
+    state.queue = Array.from({length: base + extra}, ()=>makeAlien());
+    state.todayRules = baseRules();
+    state.shieldUsed=false;
+  }
 
   function baseRules(){
     return [
       { id:'name', text:'Names must be legible and present on Passport, Visa, and Photo ID and they must match exactly.', check: a => !!a.name && !!a.vsName && !!a.pidName && !a.vsSmudged && a.name===a.vsName && a.name===a.pidName },
       { id:'expiry', text:'Passports must be unexpired (compared to current date).', check: a => new Date(a.exp+'T00:00:00') >= new Date(todayISO()+'T00:00:00') },
+      { id:'planet', text:'Planet of Origin must match the Planet Permit on the Visa.', check: a => a.planet===a.vsPlanet },
       { id:'seal', text:'Visa must have a valid security seal (NX-###).', check: a => /^NX-\d{3}$/.test(a.seal) },
       { id:'gk', text:'Genetic Key must not belong to a wanted registry when checked.', check: a => a._gkFlagged !== true },
       { id:'photo', text:'Photo ID must match live portrait features (eyes/arms/antennae/head/markings).', check: a => a.feats.eyes===a.photoFeats.eyes && a.feats.arms===a.photoFeats.arms && a.feats.antennae===a.photoFeats.antennae && a.feats.head===a.photoFeats.head && a.feats.markings===a.photoFeats.markings }
@@ -411,15 +442,18 @@
   function showDoc(a){
     byId('pp-species').textContent = a.sp; byId('pp-name').textContent = a.name; byId('pp-planet').textContent = a.planet; byId('pp-dob').textContent = fmtMDY(a.dob); byId('pp-exp').textContent = fmtMDY(a.exp); byId('pp-gk').textContent = a.gk;
     const vsNameCell = byId('vs-name'); vsNameCell.textContent = (a.vsName && a.vsName.trim()) ? a.vsName : '—'; vsNameCell.classList.toggle('illegible', !!a.vsSmudged); vsNameCell.title = a.vsSmudged ? 'Visa name appears smudged/illegible' : '';
-    byId('vs-purpose').textContent = a.purpose; byId('vs-duration').textContent = a.duration; byId('vs-planet').textContent = a.planet; byId('vs-quar').textContent = a.quarantine; byId('vs-seal').textContent = a.seal;
-    const liveURL = renderAlienSVG(a.feats); const photoURL = renderAlienSVG(a.photoFeats); byId('pp-live').src = liveURL; byId('pid-photo').src = photoURL; byId('pid-name').textContent = a.pidName || a.name; byId('pid-caption').textContent = a.hints && a.hints.length ? a.hints[0] : 'Recorded at prior docking'; byId('pp-feats').textContent = featuresSummary(a.feats); byId('pid-feats').textContent = featuresSummary(a.photoFeats);
+    byId('vs-purpose').textContent = a.purpose; byId('vs-duration').textContent = a.duration; byId('vs-planet').textContent = a.vsPlanet; byId('vs-quar').textContent = a.quarantine; byId('vs-seal').textContent = a.seal;
+    const liveURL = renderAlienSVG(a.feats); const photoURL = renderAlienSVG(a.photoFeats); byId('pp-live').src = liveURL; byId('pid-photo').src = photoURL; byId('pid-name').textContent = a.pidName || a.name; byId('pid-caption').textContent = 'Dockyard archive photo on arrival'; byId('pp-feats').textContent = featuresSummary(a.feats); byId('pid-feats').textContent = featuresSummary(a.photoFeats);
     ['pp-stamp','vs-stamp','pid-stamp'].forEach(id=>byId(id).style.opacity=0);
   }
 
+  function setDecisionButtons(disabled){ ['approve','deny','detain'].forEach(id=>{ const b=byId(id); if(b){ b.disabled=disabled; b.style.opacity = disabled ? 0.6 : 1; } }); }
+
   function popNext(){
     const input=byId('manual-gk'); if(input) input.value='';
-    if(!state.queue || !state.queue.length){ state.current=null; log('Queue empty. End the day to proceed.'); return; }
+    if(!state.queue || !state.queue.length){ state.current=null; log('Queue empty. End the day to proceed.'); setDecisionButtons(true); return; }
     state.current = state.queue.shift();
+    state.current._resolved=false; setDecisionButtons(false);
     renderQueue(); showDoc(state.current); log(`Next ship: ${state.current.name} (${state.current.sp}) from ${state.current.planet}`);
   }
 
@@ -435,14 +469,18 @@
   function manualCheck(){ const code = byId('manual-gk').value.trim(); if(!code){ toast('Type a genetic code to check'); return; } const flagged = wantedRegistry.has(code); if(!state.current){ toast('No current applicant'); return; } if(flagged){ state.current._gkFlagged = true; byId('pp-gk').textContent = state.current.gk + ' (WANTED)'; log('Manual check: '+code+' flagged'); toast('Manual check: WANTED'); } else { log('Manual check: '+code+' not found'); toast('Manual check: not found'); } }
 
   // Adjudication
-  function evaluate(answer){ if(!state.current){ toast('No ship selected'); return; } const a=state.current; const failures = (state.todayRules||baseRules()).filter(r=>!r.check(a)); const quarantineHeavy = ['Level-2','Biohazard'].includes(a.quarantine); const wanted = !!a._gkFlagged; const correctDecision = wanted || quarantineHeavy ? 'DETAIN' : (failures.length===0 ? 'APPROVE' : 'DENY');
+  function evaluate(answer){ if(!state.current){ toast('No ship selected'); return; } const a=state.current; if(a._resolved){ toast('Decision already recorded'); return; }
+    const failures = (state.todayRules||baseRules()).filter(r=>!r.check(a)); const quarantineHeavy = ['Level-2','Biohazard'].includes(a.quarantine); const wanted = !!a._gkFlagged; const correctDecision = wanted || quarantineHeavy ? 'DETAIN' : (failures.length===0 ? 'APPROVE' : 'DENY');
     const ppStamp = byId('pp-stamp'); const vsStamp = byId('vs-stamp'); const pidStamp = byId('pid-stamp');
     if(answer==='APPROVE'){ vsStamp.style.opacity=1; vsStamp.textContent='APPROVED'; vsStamp.classList.add('ok'); }
     if(answer==='DENY'){ ppStamp.style.opacity=1; ppStamp.textContent='DENIED'; ppStamp.classList.remove('ok'); }
     if(answer==='DETAIN'){ ppStamp.style.opacity=1; ppStamp.textContent='DETAINED'; ppStamp.classList.remove('ok'); }
     if(a.feats.eyes!==a.photoFeats.eyes || a.feats.arms!==a.photoFeats.arms || a.feats.antennae!==a.photoFeats.antennae || a.feats.head!==a.photoFeats.head || a.feats.markings!==a.photoFeats.markings){ pidStamp.style.opacity=0.3; }
-    let delta=0, xp=0; if(answer===correctDecision){ delta=5+Math.max(0,3-failures.length); xp=15; state.credits+=delta; state.xp+=xp; log('✔ Correct: '+answer+' • +'+delta+' credits'); toast('Correct (+'+delta+'₵, +'+xp+'xp)'); } else { state.credits-=3; state.strikes++; log('✖ Wrong: chose '+answer+' expected '+correctDecision+' • -3 credits'); toast('Incorrect (−3₵) • Strike '+state.strikes); if(state.strikes>=3){ endDay('Too many strikes. Shift ended.'); return; } }
-    renderHeader(); }
+    let delta=0, xp=0; const payBonus = state.upgrades.pay||0; if(answer===correctDecision){ delta=5+Math.max(0,3-failures.length)+payBonus; xp=15; state.credits+=delta; state.xp+=xp; log('✔ Correct: '+answer+' • +'+delta+' credits'); toast('Correct (+'+delta+'₵, +'+xp+'xp)'); } else {
+      if(state.upgrades.shield && !state.shieldUsed){ state.shieldUsed=true; log('✖ Wrong (shielded): chose '+answer+' expected '+correctDecision); toast('Shield absorbed the strike'); }
+      else { state.credits-=3; state.strikes++; log('✖ Wrong: chose '+answer+' expected '+correctDecision+' • -3 credits'); toast('Incorrect (−3₵) • Strike '+state.strikes); if(state.strikes>=3){ endDay('Too many strikes. Shift ended.'); a._resolved=true; setDecisionButtons(true); return; } }
+    }
+    a._resolved=true; setDecisionButtons(true); renderHeader(); }
 
   function endDay(reason){ state.inDay=false; byId('btn-newday').textContent='Start Day'; if(reason) log('Day ended: '+reason); const input=byId('manual-gk'); if(input) input.value=''; save(); renderHeader(); }
 
@@ -467,6 +505,49 @@
   if(manualClose){ manualClose.addEventListener('click',()=>{ manualEl.style.display='none'; }); }
   manualEl.addEventListener('click',e=>{ if(e.target===manualEl) manualEl.style.display='none'; });
 
+  // Shop modal + upgrades
+  const shopEl = document.getElementById('shop');
+  const shopBtn = document.getElementById('btn-shop');
+  const shopClose = document.getElementById('shop-close');
+  const SHOP_ITEMS = [
+    {id:'pay', name:'Paygrade Boost', desc:'+1 credit on correct decisions (stacks up to +3).', cost:[30,60,90], type:'level', max:3},
+    {id:'shield', name:'Shielded Clause', desc:'Ignore the first strike and credit penalty each day.', cost:[50], type:'flag', max:1},
+    {id:'queuePlus', name:'Queue Extender', desc:'Adds +2 ships per day (max +4).', cost:[25,40], type:'level', max:2}
+  ];
+  function renderShop(){
+    const list=document.getElementById('shop-list'); list.innerHTML='';
+    SHOP_ITEMS.forEach(it=>{
+      const level = (it.id==='shield') ? (state.upgrades.shield?1:0) : (state.upgrades[it.id]||0);
+      const owned = it.type==='flag' ? !!state.upgrades[it.id] : level;
+      const atMax = it.type==='flag'? owned : level>=it.max;
+      const price = it.type==='flag'? it.cost[0] : it.cost[Math.min(level, it.cost.length-1)];
+      const affordable = state.credits>=price && !atMax;
+      const row=document.createElement('div'); row.className='hammer';
+      row.innerHTML = `<div style="display:flex;gap:10px;align-items:center;justify-content:space-between">
+        <div><div style="font-weight:700">${it.name}${it.type==='level'?' (Lv.'+level+'/'+it.max+')':''}</div>
+        <div class="muted">${it.desc}</div></div>
+        <div class="flex" style="gap:8px">
+          <div class="chip">Cost: ${price}₵</div>
+          <button class="btn" data-id="${it.id}" ${(!affordable?'disabled':'')}>${atMax?'Maxed':'Buy'}</button>
+        </div>
+      </div>`;
+      list.appendChild(row);
+    });
+    list.querySelectorAll('button[data-id]').forEach(b=> b.onclick=()=>buyUpgrade(b.getAttribute('data-id')) );
+  }
+  function buyUpgrade(id){
+    const it = SHOP_ITEMS.find(x=>x.id===id); if(!it) return;
+    let level = (id==='shield')?(state.upgrades.shield?1:0):(state.upgrades[id]||0);
+    const atMax = it.type==='flag'? !!level : level>=it.max; if(atMax){ toast('Already maxed'); return; }
+    const price = it.type==='flag'? it.cost[0] : it.cost[Math.min(level, it.cost.length-1)];
+    if(state.credits<price){ toast('Not enough credits'); return; }
+    state.credits-=price; if(id==='shield'){ state.upgrades.shield=true; } else { state.upgrades[id]=(level+1); }
+    save(); renderHeader(); renderShop(); toast('Purchased: '+it.name);
+  }
+  if(shopBtn){ shopBtn.addEventListener('click',()=>{ renderShop(); shopEl.style.display='flex'; }); }
+  if(shopClose){ shopClose.addEventListener('click',()=>{ shopEl.style.display='none'; }); }
+  shopEl.addEventListener('click',e=>{ if(e.target===shopEl) shopEl.style.display='none'; });
+
   // (Optional) click-to-zoom portraits
   const lb=document.getElementById('lightbox'); const lbImg=document.getElementById('lightbox-img');
   function enableZoom(img){ img.addEventListener('click',()=>{ lbImg.src=img.src; lb.style.display='flex'; }); }
@@ -477,17 +558,26 @@
   function runTests(){
     const rules = baseRules();
     const ok = makeAlien(); // valid-ish
-    ok.vsSmudged=false; ok.vsName=ok.name; ok.photoFeats=JSON.parse(JSON.stringify(ok.feats)); ok.seal='NX-123'; ok.exp=new Date(Date.now()+86400000).toISOString().slice(0,10);
+    ok.vsSmudged=false; ok.vsName=ok.name; ok.photoFeats=JSON.parse(JSON.stringify(ok.feats)); ok.seal='NX-123'; ok.exp=new Date(Date.now()+86400000).toISOString().slice(0,10); ok.vsPlanet = ok.planet; ok.quarantine='None'; ok._gkFlagged=false;
     const assert=(name,cond)=>{ log((cond?'[TEST PASS] ':'[TEST FAIL] ')+name); };
     assert('name match', rules.find(r=>r.id==='name').check(ok));
     assert('expiry future', rules.find(r=>r.id==='expiry').check(ok));
+    assert('planet match', rules.find(r=>r.id==='planet').check(ok));
     assert('seal valid', rules.find(r=>r.id==='seal').check(ok));
     // negatives
     const bad1={...ok, exp:new Date(Date.now()-86400000).toISOString().slice(0,10)}; assert('expiry rule fails on past', !rules.find(r=>r.id==='expiry').check(bad1));
-    const bad2={...ok, seal:'FORGE'}; assert('seal rejects FORGE', !rules.find(r=>r.id==='seal').check(bad2));
-    const bad3={...ok, vsSmudged:true}; assert('illegible visa name fails', !rules.find(r=>r.id==='name').check(bad3));
+    const bad2={...ok, seal:'NX-1234'}; assert('seal rejects extra digit', !rules.find(r=>r.id==='seal').check(bad2));
+    const allPlanets = SPECIES.map(s=>s.planets).reduce((a,b)=>a.concat(b),[]); const otherP = allPlanets.find(p=>p!==ok.planet) || 'Otheria'; const bad3={...ok, vsPlanet:otherP}; assert('planet mismatch fails', !rules.find(r=>r.id==='planet').check(bad3));
     const bad4={...ok, _gkFlagged:true}; assert('wanted GK fails', !rules.find(r=>r.id==='gk').check(bad4));
     const bad5={...ok, photoFeats:{...ok.photoFeats, arms:ok.photoFeats.arms+1}}; assert('photo mismatch fails', !rules.find(r=>r.id==='photo').check(bad5));
+
+    // NEW: evaluate idempotent (no farming)
+    const savedCredits = state.credits; const savedXP = state.xp; state.current = JSON.parse(JSON.stringify(ok)); state.current._resolved=false; showDoc(state.current);
+    evaluate('APPROVE'); evaluate('APPROVE');
+    assert('evaluate processed only once', (state.credits - savedCredits) > 0 && (state.credits - savedCredits) < 20 && (state.xp - savedXP) === 15);
+
+    // NEW: shop purchase applies and charges credits
+    const preC = state.credits; state.credits = 100; state.upgrades.pay=0; buyUpgrade('pay'); assert('shop deducts credits and increases pay level', state.credits===70 && state.upgrades.pay===1);
 
     // NEW: renderRules tolerates undefined todayRules
     const oldRules = state.todayRules; delete state.todayRules; try{ renderRules(); assert('renderRules with undefined todayRules does not crash', true); }catch(e){ assert('renderRules with undefined todayRules does not crash', false); } finally { state.todayRules = oldRules || baseRules(); }
@@ -503,7 +593,7 @@
   }
 
   // Boot
-  load(); renderHeader(); state.queue = Array.from({length:5}, ()=>makeAlien()); renderRules(); renderQueue(); runTests();
+  loadSave(); renderHeader(); state.queue = Array.from({length:5}, ()=>makeAlien()); renderRules(); renderQueue(); runTests();
 })();
 </script>
 </body>
