@@ -76,8 +76,9 @@
   @media (max-width: 1200px){ .grid{ grid-template-columns: 280px 1fr 300px; } }
   @media (max-width: 1000px){ .grid{ grid-template-columns: 1fr; } .desk{ grid-template-columns: 1fr; } .panel{ max-height: none; } }
 </style>
-<style id="compact-overrides">
+<style id=\"compact-overrides\">
   /* Compact, no-scroll overrides */
+  html,body{overflow-x:hidden}
   body{font-size:13px;line-height:1.4}
   .wrap{max-width:1200px;padding:8px}
   header{padding:8px 10px}
@@ -101,8 +102,19 @@
   .log{height:90px;overflow:hidden}
   .rule{padding:6px}
   .progress{height:6px}
+
+  /* Auto mobile layout */
+  @media (max-width: 820px){
+    .grid{grid-template-columns:1fr;height:auto}
+    .panel{max-height:none;overflow:visible}
+    .desk{grid-template-columns:1fr}
+    header{flex-wrap:wrap;gap:6px}
+    .stat{padding:2px 6px;font-size:12px}
+    .btn{padding:6px 8px;font-size:12px}
+  }
+
   /* Phone-friendly sticky action bar */
-  @media (max-width: 720px){
+  @media (max-width: 900px){
     .tools.big{position:sticky;bottom:0;left:0;right:0;background:#0f1626CC;border-top:1px solid var(--border);backdrop-filter:blur(6px);padding:8px;z-index:5}
     .tools.big .btn{flex:1;min-height:44px}
   }
